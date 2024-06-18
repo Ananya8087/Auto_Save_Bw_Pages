@@ -1,0 +1,25 @@
+{
+    "manifest_version": 3,
+    "name": "Auto Save Form Data Extension",
+    "version": "1.0",
+    "description": "An extension to auto-save form data from webpages",
+    "permissions": ["activeTab", "storage"],
+    "background": {
+      "service_worker": "background.js"
+    },
+    "content_scripts": [
+      {
+        "matches": ["https://mt.ihx.in/services/bill/portal/qc"],
+        "js": ["content.js"]
+      }
+    ],
+    "action": {
+      
+      "default_icon": {
+        "16": "humanifiicon.png",
+        "48": "humanifiicon.png",
+        "128": "humanifiicon.png"
+      }
+    }
+  }
+  
