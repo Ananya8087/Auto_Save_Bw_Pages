@@ -1,122 +1,318 @@
-(function () {
-  let isSaveInProgress = false; // Flag to track if save draft operation is in progress
+window.addEventListener('load', () => {
+  console.log('Window loaded, capturing initial data');
 
-  // Function to simulate clicking the "Next Page" or "Previous Page" button
-  function clickPageNavigationButton(direction) {
-    return new Promise((resolve, reject) => {
-      let buttonSelector;
-      if (direction === 'next') {
-        buttonSelector = '.image_controls .p-button img[src*="rightArrow"]';
-      } else if (direction === 'previous') {
-        buttonSelector = '.image_controls .p-button img[src*="leftArrow"]';
+  // Function to wait until the sidebar is loaded
+  function waitForSidebarElement(callback) {
+    const checkInterval = setInterval(() => {
+      const sidebarElement = document.querySelector('.p-sidebar.p-component.p-sidebar-right.p-sidebar-active');
+      if (sidebarElement) {
+        clearInterval(checkInterval);
+        callback(sidebarElement);
       }
+    }, 500); // Check every 500ms
+  }
 
-      const pageButton = document.querySelector(buttonSelector)?.closest('.p-button');
-      if (pageButton) {
-        console.log(`${direction} page button found. Simulating click...`);
-        pageButton.disabled = false; // Ensure button is enabled
-        pageButton.click(); // Simulate click event
-        console.log(`Clicked on the "${direction.charAt(0).toUpperCase() + direction.slice(1)} Page" button.`);
+  // Function to send data to Google Sheets with claim status
+  function sendDataToGoogleSheet(data, claimStatus) {
+    data.claim_status = claimStatus; // Update claim status in data object
+    fetch('https://script.google.com/macros/s/AKfycbyTkJysE2o5dxmNNk18-7LUybw130On4MzghRThE7TUzTgkS0No2V5S2_491-3lrqZw/exec', {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    })
+    .then(response => response.json())
+    .then(result => {
+      console.log('Data sent successfully:', result);
+      // Handle success if needed
+    })
+    .catch(error => {
+      console.error('Error sending data:', error);
+      // Handle error if needed
+    });
+  }
 
-        // Additional logging to observe changes after navigation
-        setTimeout(() => {
-          console.log('After navigation: Current URL:', window.location.href);
-          console.log('After navigation: Document title:', document.title);
-          // Add more observations as needed
-          resolve(); // Resolve the promise after navigation completes
-        }, 7000); // Adjust delay as needed to ensure navigation completes
+  // Function to fetch all caseIds from Google Sheets
+  function fetchAllCaseIds(callback) {
+    fetch('https://script.google.com/macros/s/AKfycbyTkJysE2o5dxmNNk18-7LUybw130On4MzghRThE7TUzTgkS0No2V5S2_491-3lrqZw/exec')
+      .then(response => response.json())
+      .then(allData => {
+        console.log('Existing case IDs:', allData.caseIds);
+        callback(allData.caseIds);
+      })
+      .catch(error => {
+        console.error('Error fetching data:', error);
+        callback([]);
+      });
+  }
+
+  // Initialize data object
+  let data = {};
+
+  // Retrieve stored data from localStorage if available
+  let storedData = localStorage.getItem('capturedData');
+  if (storedData) {
+    data = JSON.parse(storedData);
+    console.log('Retrieved stored data:', data);
+  }
+
+  // Create QC Pass and QC Fail Buttons
+  const mainSectionContainer = document.querySelector('.mainsection.d-md-flex');
+
+  const qcPassButton = document.createElement('button');
+  qcPassButton.style.position = "absolute";
+  qcPassButton.textContent = 'QC Pass';
+  qcPassButton.className = 'qcButton';
+  qcPassButton.style.top = '45px';
+  qcPassButton.style.right = '115px';
+  qcPassButton.style.backgroundColor = "LawnGreen";
+  mainSectionContainer.appendChild(qcPassButton);
+
+  const qcFailButton = document.createElement('button');
+  qcFailButton.style.position = "absolute";
+  qcFailButton.textContent = 'QC Fail';
+  qcFailButton.className = 'qcButton';
+  qcFailButton.style.top = '45px';
+  qcFailButton.style.right = '17px';
+  qcFailButton.style.backgroundColor = "Red";
+  mainSectionContainer.appendChild(qcFailButton);
+
+  // Disable QC buttons initially
+  qcPassButton.disabled = true;
+  qcFailButton.disabled = true;
+
+  
+  
+
+  const saveDraftButton = document.querySelector('.qcButtons .qc_reject_btn');
+
+  // Add click listener to Save Draft button
+  saveDraftButton.addEventListener('click', () => {
+    console.log('Save Draft button clicked');
+    function extractDetailAmountWithDelay(callback) {
+      // Find the element
+      var detailAmountElement = document.querySelector('p.detail_amnt_data b');
+      console.log(detailAmountElement);
+      
+      // Check if the element exists
+      if (detailAmountElement) {
+        // Set a delay before extracting the inner text
+        setTimeout(function() {
+          // Extract the inner text after the delay
+          var detailAmountValue = detailAmountElement.textContent.trim();
+          console.log('Detail Amount:', detailAmountValue);
+          callback(detailAmountValue);
+        }, 2000); // 2000 milliseconds delay (2 seconds)
       } else {
-        console.log(`${direction} page button not found.`);
-        reject(new Error(`${direction} page button not found.`));
+        console.log('Detail Amount element not found.');
+        callback('N/A');
       }
+    }
+  
+    // Call the function and update the data object with detailAmount
+    extractDetailAmountWithDelay(function(detailAmountValue) {
+      data.detailAmount = detailAmountValue || 'N/A';
+      console.log('Final Data after detailAmount update:', data);
+  
+      // Store data in localStorage
+      localStorage.setItem('capturedData', JSON.stringify(data));
+      console.log('Data stored locally:', data);
     });
+
+    // Update localStorage with current data
+    localStorage.setItem('capturedData', JSON.stringify(data));
+    console.log('Data stored locally:', data);
+  });
+
+  // Function to monitor the Submit button state
+  function monitorSubmitButtonState() {
+    const submitButton = document.querySelector('.btn_header.submit_btn.qc_submit_btn.blue_btn');
+
+    if (submitButton) {
+      const observer = new MutationObserver(() => {
+        qcPassButton.disabled = submitButton.disabled;
+        qcFailButton.disabled = submitButton.disabled;
+      });
+
+      // Observe changes to the submit button's attributes
+      observer.observe(submitButton, { attributes: true, attributeFilter: ['disabled'] });
+
+      // Initial check
+      qcPassButton.disabled = submitButton.disabled;
+      qcFailButton.disabled = submitButton.disabled;
+    }
   }
 
-  // Function to simulate clicking the "Save Draft" button
-  function clickSaveDraftButton() {
-    return new Promise((resolve, reject) => {
-      if (isSaveInProgress) {
-        console.log('Save operation already in progress. Ignoring.');
-        return reject(new Error('Save operation already in progress.'));
-      }
+  // Monitor the Submit button state
+  monitorSubmitButtonState();
 
-      const saveDraftButton = document.querySelector('.qcButtons .qc_reject_btn');
-      if (saveDraftButton) {
-        isSaveInProgress = true; // Set flag to true before starting save operation
-        console.log('Attempting to click on the "Save Draft" button.');
-        saveDraftButton.click();
-        console.log('Clicked on the "Save Draft" button.');
+ 
 
-        // Simulate an asynchronous save operation
-        setTimeout(() => {
-          console.log('Save Draft completed.');
-          isSaveInProgress = false; // Reset flag after save draft completes
-          resolve(); // Resolve the promise after save draft completes
-        }, 1000); // Simulated delay of 1000 milliseconds (adjust as needed)
+  // Function to check and send data to Google Sheets
+  function checkAndSendData(claimStatus) {
+    // Fetch existing caseIds and check for duplicates
+    fetchAllCaseIds(existingCaseIds => {
+      const currentCaseId = parseInt(data.caseId);
+      const caseIds = Array.isArray(existingCaseIds) ? existingCaseIds : [];
+      const exists = caseIds.length >= 1 && caseIds.includes(currentCaseId);
+
+      if (exists) {
+        console.log('Duplicate case ID found:', currentCaseId);
+        console.log('Data not sent to Google Sheets.');
       } else {
-        console.log('Save Draft button not found.');
-        reject(new Error('Save Draft button not found.'));
+        console.log('No duplicate found. Sending data to Google Sheets.');
+
+        // Send data with claim status as QC Pass or QC Fail
+        sendDataToGoogleSheet(data, claimStatus);
       }
     });
   }
+  qcPassButton.addEventListener('click', () => {
+    console.log('QC Pass button clicked');
+    checkAndSendData('QC Pass');
+  });
 
-  // Function to create the "Save & Next" and "Save & Previous" buttons
-  function createSaveAndNavigationButtons() {
-    const buttonContainer = document.createElement('div');
-    buttonContainer.style.position = 'fixed';
-    buttonContainer.style.top = '5px';
-    buttonContainer.style.right = '400px';
-    buttonContainer.style.zIndex = '1000'; // Ensure it's on top of other elements
-
-    // Save & Previous button
-    const saveAndPreviousButton = document.createElement('button');
-    saveAndPreviousButton.textContent = 'Save & Previous';
-    saveAndPreviousButton.id = 'save_and_previous';
-    saveAndPreviousButton.style.padding = '10px';
-    saveAndPreviousButton.style.cursor = 'pointer';
-    saveAndPreviousButton.style.marginRight = '10px';
-
-    saveAndPreviousButton.addEventListener('click', () => {
-      clickSaveDraftButton()
-        .then(() => {
-          console.log('Save Draft completed. Initiating previous page navigation...');
-          return clickPageNavigationButton('previous');
-        })
-        .then(() => {
-          console.log('Previous page navigation completed.');
-        })
-        .catch((error) => {
-          console.error('Error:', error);
-        });
-    });
-
-    // Save & Next button
-    const saveAndNextButton = document.createElement('button');
-    saveAndNextButton.textContent = 'Save & Next';
-    saveAndNextButton.id = 'save_and_next';
-    saveAndNextButton.style.padding = '10px';
-    saveAndNextButton.style.cursor = 'pointer';
-
-    saveAndNextButton.addEventListener('click', () => {
-      clickSaveDraftButton()
-        .then(() => {
-          console.log('Save Draft completed. Initiating next page navigation...');
-          return clickPageNavigationButton('next');
-        })
-        .then(() => {
-          console.log('Next page navigation completed.');
-        })
-        .catch((error) => {
-          console.error('Error:', error);
-        });
-    });
-
-    buttonContainer.appendChild(saveAndPreviousButton); // Append Save & Previous first
-    buttonContainer.appendChild(saveAndNextButton); // Then append Save & Next
-    document.body.appendChild(buttonContainer);
+  // Add click listener to QC Fail button with debounce
+  qcFailButton.addEventListener('click', () => {
+    console.log('QC Fail button clicked');
+    checkAndSendData('QC Fail');
+  });
+  function extractDetailAmountWithDelay(callback) {
+    // Find the element
+    var detailAmountElement = document.querySelector('p.detail_amnt_data b');
+    console.log(detailAmountElement);
+    
+    // Check if the element exists
+    if (detailAmountElement) {
+      // Set a delay before extracting the inner text
+      setTimeout(function() {
+        // Extract the inner text after the delay
+        var detailAmountValue = detailAmountElement.textContent.trim();
+        console.log('Detail Amount:', detailAmountValue);
+        callback(detailAmountValue);
+      }, 2000); // 2000 milliseconds delay (2 seconds)
+    } else {
+      console.log('Detail Amount element not found.');
+      callback('N/A');
+    }
   }
 
-  // Call function to create the "Save & Next" and "Save & Previous" buttons on page load
-  createSaveAndNavigationButtons();
+  // Call the function and update the data object with detailAmount
+  extractDetailAmountWithDelay(function(detailAmountValue) {
+    data.detailAmount = detailAmountValue || 'N/A';
+    console.log('Final Data after detailAmount update:', data);
 
-})();
+    // Store data in localStorage
+    localStorage.setItem('capturedData', JSON.stringify(data));
+    console.log('Data stored locally:', data);
+  });
+
+  // Wait for the sidebar element
+  waitForSidebarElement((sidebarElement) => {
+    const claimedAmountElement = sidebarElement.querySelector('div:nth-child(2) > div > b');
+    const claimedAmount = claimedAmountElement ? claimedAmountElement.innerText.trim() : 'N/A';
+
+    // Capture the email
+    const emailElement = document.querySelector('span.user_name_header');
+    const email = emailElement ? emailElement.innerText.trim() : 'N/A';
+
+    // Capture the Case ID
+    const caseIdElement = document.querySelector('div[class=""] > button[class="unass_cases"] > div[class=""] > b[data-v-012f2b64=""]');
+    const caseId = caseIdElement ? caseIdElement.innerText.trim() : 'N/A';
+
+    // Capture the caseType based on the presence of targetImageSrc (assumed to be defined)
+    const targetImageSrc = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAoCAYAAACM/rhtAAAABHNCSVQICAgIfAhkiAAAABl0RVh0U29mdHdhcmUAZ25vbWUtc2NyZWVuc2hvdO8Dvz4AAAAxdEVYdENyZWF0aW9uIFRpbWUAVHVlc2RheSAyNCBPY3RvYmVyIDIwMjMgMDE6MjY6MTUgUE1IQK2TAAAEG0lEQVRYhe2Yz08bRxTHv5usvWtjpwYM2GoUhV+KU5VKTqJECqRS6X9AEkLSQ8G5UtSeIoxURQk4p7YKyi3xkkOJ2iZnuDQ+JI7UtKkslYiKukVQhWIqbEd4sdc/WOdADTGzy84upuGQ721n9s1+9r0382aGKRaLRexh7XvTAFra84CsUcN0WsbTn9IIh1cxPZ1BLJbHWuG/QVkGLpcJR9/j0NFhw8lTVlRVGfMFozcH5+dyGB9P4uGPKeRydKYcx6DzYzsufVKNw4fNuwMoSTLu3I7jwf2XWFvT9Y0NsSyDc+cd8F2ugcVC51EqwNnZHIavxxD9I2uMbIuOHOEx6K9Hcwu3c8DnUxKG/P8gkTDoNhU5nSyuDbvR1sYbB5ydzeKLzxeQiFcWriSnk8VXX7+Lpmb1vFRNhExGxvD1pV2DA4Dl5QICI0tIp2XVd1SXmeCd+LY519rKwWYr/z9RlBGN6svTmRkJQjCO/s/qFPsVQzw/l0Pvp/MoFNQHHr11EF6vRbU/EslgcmIFkxMrmpAmM4OgcAiNjWSoFUM8/m1yWzgaeb0W+IcaINw9RHh6q/K5Ir67l1TsIyxFcQ2hUEoXjCjKiEQyiuFtbeXQfaFac4xQKIVUisx3AvDZLxlks/o2ONFoFgP9L+Dr/Rtn2qMIjCyV9Z/vdmiOIUlF/Posow0YDou64JQ0ObGCx482x9EKcUlPnqwSbYTl8ylpB2ibEkX1pUNNU79ReDBegXXP5TbhzIe2jefYYp7KLh4nZyaxDkqS/j93u1j4LtcCAFpazPAes5aFdXR0mWocSSJz3/B+8HW53Cb0+WoU+8aERFk+6hUByPOM4p8Y0UD/C0QiZF6piecZoo3Iwdpa/U6NLeYxJiQwJiTK2r3HrLrGcTrJbxMtbR9YsLBAl9QlLcYKEILxjedSuPt8NXj8SKSuz++3kaWT8GB7e5UuuK364ftk2awN3HBTr4OnT5PfJiyPn7Ao5gKtRFEuqyTrE6hW047nGRw/QeFBu30/OjvthgGB9Z3M6zO3+4Jj250PAHzUaceBA/u1AQGg51I1TGbjXgSAwMhSWTXxDzWohtpsZtBzUXlDoWjR2GhGV9c7OwIURRljwubE2S7UXWcdaGpS3varnknSaRkD/QuYmalMbVaTx8Phm5sHVb2rOr2s1n3wDzUork2VUn09iyuD6qEHNO5mmprNuDbs3hXIujoWX151oUXjbEx1cP/rzyxuBP6tWLg9Hg5XBhs04agBgfVjqBBM4MH9lygUjNVqk4nB2XMO9PbVUF8m6b48mpvL4d54EqGHKeqjAc+vXx71XKxWPLlVFLCk1VUZPz9NIxwW8ft0FrFYfsOzLMvA7TbBc5RDe4cNp05aUUVZ7ioG+H9pz9+wvgXcqfY84Ctvoo39/B4rCgAAAABJRU5ErkJggg==';
+    const caseTypeElement = document.querySelector(`img[src="${targetImageSrc}"]`);
+    const caseType = caseTypeElement ? 'RI' : 'PA';
+
+    // Create the data object
+    data = {
+      caseType: caseType,
+      email: email || 'N/A',
+      caseId: caseId || 'N/A',
+      cashDiscount: 'N/A',
+      claimedAmount: claimedAmount || 'N/A', // Placeholder for claimedAmount
+      detailAmount: 'N/A'   // Placeholder for detailAmount
+    };
+
+    // Log the captured data to the console
+    console.log('Captured initial data:', data);
+
+    // Function to update cashDiscount when the Update button is clicked
+    function updateCashDiscount() {
+      const cashDiscountElement = sidebarElement.querySelector('.p-field.p-col input[type="text"][placeholder="enter amount"]');
+      const cashDiscountValue = cashDiscountElement ? cashDiscountElement.value.trim() : 'N/A';
+      data.cashDiscount = cashDiscountValue; // Update data object with new cashDiscount value
+      console.log('Updated cashDiscount:', cashDiscountValue);
+      console.log(data);
+    }
+
+    // Add input event listener to cashDiscountElement
+    const cashDiscountElement = sidebarElement.querySelector('.p-field.p-col input[type="text"][placeholder="enter amount"]');
+    cashDiscountElement.addEventListener('input', updateCashDiscount);
+
+    // Function to find the element and extract its inner text with a delay
+    function extractDetailAmountWithDelay(callback) {
+      // Find the element
+      var detailAmountElement = document.querySelector('p.detail_amnt_data b');
+      console.log(detailAmountElement);
+      
+      // Check if the element exists
+      if (detailAmountElement) {
+        // Set a delay before extracting the inner text
+        setTimeout(function() {
+          // Extract the inner text after the delay
+          var detailAmountValue = detailAmountElement.textContent.trim();
+          console.log('Detail Amount:', detailAmountValue);
+          callback(detailAmountValue);
+        }, 2000); // 2000 milliseconds delay (2 seconds)
+      } else {
+        console.log('Detail Amount element not found.');
+        callback('N/A');
+      }
+    }
+
+    // Call the function and update the data object with detailAmount
+    extractDetailAmountWithDelay(function(detailAmountValue) {
+      data.detailAmount = detailAmountValue || 'N/A';
+      console.log('Final Data after detailAmount update:', data);
+
+      // Store data in localStorage
+      localStorage.setItem('capturedData', JSON.stringify(data));
+      console.log('Data stored locally:', data);
+    });
+
+    // Select the Update button
+    const updateButton = sidebarElement.querySelector('.btn_header.reject_btn.patient_update_btn');
+
+    // Add click listener to Update button
+    updateButton.addEventListener('click', () => {
+      console.log('Update button clicked');
+      updateCashDiscount(); // Update cashDiscount when the button is clicked
+
+      // Update localStorage on button click
+      localStorage.setItem('capturedData', JSON.stringify(data));
+      console.log('Data stored locally:', data);
+    });
+
+    // Debounce function for checkAndSendData to prevent multiple submissions
+    const debouncedCheckAndSendData = debounce((claimStatus) => {
+      console.log('Debounced sending data to Google Sheets');
+      checkAndSendData(claimStatus);
+    }, 1000); // 1000 milliseconds debounce delay (1 second)
+
+    // Add click listener to QC Pass button with debounce
+    qcPassButton.addEventListener('click', () => {
+      console.log('QC Pass button clicked');
+      debouncedCheckAndSendData('QC Pass');
+    });
+
+    // Add click listener to QC Fail button with debounce
+    qcFailButton.addEventListener('click', () => {
+      console.log('QC Fail button clicked');
+      debouncedCheckAndSendData('QC Fail');
+    });
+  });
+});
