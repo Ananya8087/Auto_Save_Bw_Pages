@@ -1,7 +1,16 @@
 (function () {
-  
-
   let isSaveInProgress = false; // Flag to track if save draft operation is in progress
+
+  // Function to check if current page is the last page
+  function isLastPage() {
+    const currentPageElement = document.querySelector('b[data-v-d19b1848=""]');
+    if (currentPageElement) {
+      const currentPageText = currentPageElement.textContent.trim();
+      const [currentPage, totalPages] = currentPageText.split('/');
+      return currentPage === totalPages;
+    }
+    return false;
+  }
 
   // Function to simulate clicking the "Next Page" or "Previous Page" button
   function clickPageNavigationButton(direction) {
@@ -100,17 +109,27 @@
     saveAndNextButton.style.cursor = 'pointer';
 
     saveAndNextButton.addEventListener('click', () => {
-      clickSaveDraftButton()
-        .then(() => {
-          console.log('Save Draft completed. Initiating next page navigation...');
-          return clickPageNavigationButton('next');
-        })
-        .then(() => {
-          console.log('Next page navigation completed.');
-        })
-        .catch((error) => {
-          console.error('Error:', error);
-        });
+      if (isLastPage()) {
+        clickSaveDraftButton()
+          .then(() => {
+            console.log('Save Draft completed.');
+          })
+          .catch((error) => {
+            console.error('Error:', error);
+          });
+      } else {
+        clickSaveDraftButton()
+          .then(() => {
+            console.log('Save Draft completed. Initiating next page navigation...');
+            return clickPageNavigationButton('next');
+          })
+          .then(() => {
+            console.log('Next page navigation completed.');
+          })
+          .catch((error) => {
+            console.error('Error:', error);
+          });
+      }
     });
 
     buttonContainer.appendChild(saveAndPreviousButton); // Append Save & Previous first
